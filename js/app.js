@@ -901,60 +901,89 @@
     const marks = G.el('g', {}, g.plot); // squares and error bars sit under the line and points
     p.xs.forEach((x, i) => g.dot(x, p.ys[i]));
     const mean = p.ys.reduce((t, y) => t + y, 0) / n;
-    let squares = false, record = Infinity, bestShown = false;
+    // mode: 'none' (just the line), 'abs' (error bars, absolute totals) or 'sq' (squares, squared totals)
+    let mode = 'none', bestShown = false;
+    const record = { abs: Infinity, sq: Infinity };
+    const fitAbs = p.xs.reduce((t, x, i) => t + Math.abs(p.ys[i] - (p.fit.m * x + p.fit.b)), 0);
 
     // Always one decimal so right-aligned columns line up on the decimal point.
     const d1 = (v) => { const r = P.round(v, 1); return (r < 0 ? '−' : '') + Math.abs(r).toFixed(1); };
     const cells = ['line', 'err', 'sq'].map(() => p.xs.map(() => h('td', {})));
-    const sumCell = h('td', { class: 'err-sum' });
+    const errSum = h('td', { class: 'err-sum' }), sqSum = h('td', { class: 'err-sum' });
     const table = h('table', { class: 'data horiz err-table' }, h('tbody', {},
       h('tr', {}, h('th', {}, h('var', {}, 'x')), p.xs.map((x) => h('td', {}, d1(x))), h('td', { class: 'err-sum' })),
       h('tr', {}, h('th', {}, 'Actual ', h('var', {}, 'y')), p.ys.map((y) => h('td', {}, d1(y))), h('td', { class: 'err-sum' })),
       h('tr', {}, h('th', {}, 'Line’s ', h('var', {}, 'y')), cells[0], h('td', { class: 'err-sum' })),
-      h('tr', {}, h('th', {}, 'Error'), cells[1], h('td', { class: 'err-sum' })),
-      h('tr', {}, h('th', {}, 'Error²'), cells[2], sumCell)));
+      h('tr', {}, h('th', {}, 'Error'), cells[1], errSum),
+      h('tr', {}, h('th', {}, 'Error²'), cells[2], sqSum)));
+    const tableBox = h('div', { class: 'hscroll err-scroll' }, table);
 
+    const label = h('p', { class: 'err-line muted' });
     const total = h('p', { class: 'err-total' });
-    const rms = h('p', { class: 'err-line' });
+    const typical = h('p', { class: 'err-line' });
     const bar = h('span', {});
     const pct = h('span', { class: 'err-pct' });
     const best = h('p', { class: 'err-line muted' });
     const note = h('p', { class: 'err-line err-note' });
+    const panel = h('div', { class: 'err-panel' }, label, total, typical,
+      h('span', { class: 'meter err-meter', 'aria-hidden': 'true' }, bar), pct, best, note);
+    const legend = h('div', { class: 'legend err-legend' },
+      h('span', { class: 'err-above' }, 'point above the line (+)'), h('span', { class: 'err-below' }, 'point below (−)'));
 
     function update() {
       const ls = p.xs.map((x) => at(x)), errs = p.ys.map((y, i) => y - ls[i]);
+      const sum = errs.reduce((t, e) => t + e, 0);
+      const sae = errs.reduce((t, e) => t + Math.abs(e), 0);
       const sse = errs.reduce((t, e) => t + e * e, 0);
-      record = Math.min(record, sse);
+      record.abs = Math.min(record.abs, sae);
+      record.sq = Math.min(record.sq, sse);
+      const off = mode === 'none';
+      panel.hidden = tableBox.hidden = legend.hidden = off;
       marks.replaceChildren();
       p.xs.forEach((x, i) => {
         const px = g.X(x), py = g.Y(p.ys[i]), ly = g.Y(ls[i]), side = Math.abs(py - ly);
         const cls = errs[i] >= 0 ? 'above' : 'below';
-        if (squares) {
+        if (mode === 'sq') {
           const left = px + side > g.box.l + g.box.w ? px - side : px;
           G.el('rect', { x: left, y: Math.min(py, ly), width: side, height: side, class: `g-sq ${cls}` }, marks);
         }
-        G.el('line', { x1: px, x2: px, y1: py, y2: ly, class: `g-err ${cls}` }, marks);
+        if (!off) G.el('line', { x1: px, x2: px, y1: py, y2: ly, class: `g-err ${cls}` }, marks);
         cells[0][i].textContent = d1(ls[i]);
         cells[1][i].textContent = d1(errs[i]);
         cells[1][i].className = cls;
         cells[2][i].textContent = d1(errs[i] ** 2);
       });
-      sumCell.textContent = `Total ${d1(sse)}`;
-      total.textContent = fmt(sse, 1);
-      rms.innerHTML = `RMS error = √(${fmt(sse, 1)} ÷ ${n}) ≈ <b>${fmt(Math.sqrt(sse / n), 2)}</b> — a typical point is about this far from your line.`;
+      errSum.textContent = `Total ${d1(sum)}`;
+      errSum.className = 'err-sum ' + (P.round(sum, 1) < 0 ? 'below' : 'above');
+      sqSum.textContent = `Total ${d1(sse)}`;
+      if (mode === 'abs') {
+        label.textContent = 'Total absolute error (sizes of the errors, ignoring + and −)';
+        total.textContent = fmt(sae, 1);
+        typical.innerHTML = `Average miss = ${fmt(sae, 1)} ÷ ${n} ≈ <b>${fmt(sae / n, 2)}</b> — a typical point is about this far from your line.`;
+      } else {
+        label.textContent = 'Total squared error';
+        total.textContent = fmt(sse, 1);
+        typical.innerHTML = `RMS error = √(${fmt(sse, 1)} ÷ ${n}) ≈ <b>${fmt(Math.sqrt(sse / n), 2)}</b> — a typical point is about this far from your line.`;
+      }
       const near = Math.round(100 * p.best / sse);
       bar.style.width = near + '%';
-      pct.textContent = `${near}% of the way to the best possible line`;
-      best.textContent = `Your lowest total so far: ${fmt(record, 1)}` + (bestShown ? ` · best possible: ${fmt(p.best, 1)}` : '');
-      note.textContent = near >= 99 ? 'You found the line of best fit — no other line has a smaller total!'
+      pct.textContent = `${near}% of the way to the line of best fit`;
+      best.textContent = `Your lowest total so far: ${fmt(mode === 'abs' ? record.abs : record.sq, 1)}`
+        + (bestShown ? ` · line of best fit: ${fmt(mode === 'abs' ? fitAbs : p.best, 1)}` : '');
+      note.textContent = near >= 99 ? 'You found the line of best fit — no other line has a smaller total squared error!'
         : near >= 90 ? 'Very close! Nudge the handles a little and watch the total.' : '';
     }
 
     const at = dragLine(g, VIEW, [{ x: p.xs[0], y: mean }, { x: p.xs[n - 1], y: mean }], update);
-    const segs = ['Errors', 'Squares'].map((label, k) => h('button', {
-      type: 'button', class: 'seg', 'aria-pressed': String(k === 0),
-      onclick() { squares = k === 1; segs.forEach((b, j) => b.setAttribute('aria-pressed', String(j === k))); update(); },
-    }, label));
+    const MODES = [['none', 'None'], ['abs', 'Absolutes'], ['sq', 'Squares']];
+    const segs = MODES.map(([m, text]) => h('button', {
+      type: 'button', class: 'seg', 'aria-pressed': String(m === mode),
+      onclick() {
+        mode = m; how.open = m !== 'none';
+        segs.forEach((b, j) => b.setAttribute('aria-pressed', String(MODES[j][0] === m)));
+        update();
+      },
+    }, text));
     const bestBtn = h('button', {
       class: 'btn', type: 'button',
       onclick() {
@@ -965,26 +994,28 @@
     }, 'Show the best line');
     update();
 
+    // Collapsed while no errors are shown; opens when Absolutes or Squares is picked.
+    const how = h('details', { class: 'solution how' },
+      h('summary', {}, 'How the total error is calculated'),
+      h('ol', {},
+        h('li', { html: `<b>Error</b> for each point = actual ${V('y')} − line's ${V('y')}. Above the line it's positive, below it's negative.
+          <i>Absolutes</i> shows each error as a bar and adds up their sizes, ignoring the signs.` }),
+        h('li', { html: `<b>Square</b> each error. This makes every error positive, so misses above and below can't cancel out, and it makes big misses count much more than small ones. Switch to <i>Squares</i> to see them as actual squares.` }),
+        h('li', { html: `<b>Add</b> the squares → the <b>total squared error</b>. The smaller the total, the better the line fits.` }),
+        h('li', { html: `<b>RMS error</b> = √(total ÷ number of points). Dividing by the number of points gives the average square, and the square root turns it back into ${V('y')}-units.` })),
+      h('p', {}, 'Why not just add up the errors? Watch the Total on the Error row: positive and negative errors cancel, so a badly tilted line through the middle of the points can still add up to zero. (The line of best fit always adds up to zero too, so a zero total alone doesn’t mean the line is good.)'));
+
     const host = h('div', { class: 'card problem' },
-      h('p', { class: 'prompt' }, h('b', {}, 'Drag the two orange handles'), ' to make the total squared error as small as you can.'),
+      h('p', { class: 'prompt' }, h('b', {}, 'Drag the two orange handles'), ' to place your line of best fit. ',
+        'Then switch on ', h('i', {}, 'Absolutes'), ' or ', h('i', {}, 'Squares'), ' to measure how far off it is, and make the total as small as you can.'),
       h('div', { class: 'split' },
-        h('div', { class: 'graph-box' }, g.svg,
-          h('div', { class: 'legend err-legend' }, h('span', { class: 'err-above' }, 'point above the line (+)'), h('span', { class: 'err-below' }, 'point below (−)'))),
-        h('div', { class: 'err-panel' },
-          h('span', { class: 'field choice', role: 'group', 'aria-label': 'show errors or squares' }, segs),
-          h('p', { class: 'err-line muted' }, 'Total squared error'),
-          total, rms,
-          h('span', { class: 'meter err-meter', 'aria-hidden': 'true' }, bar), pct, best, note)),
-      h('div', { class: 'hscroll err-scroll' }, table),
+        h('div', { class: 'graph-box' }, g.svg, legend),
+        h('div', { class: 'err-side' },
+          h('span', { class: 'field choice', role: 'group', 'aria-label': 'how to show the errors' }, segs),
+          panel)),
+      tableBox,
       h('div', { class: 'actions' }, bestBtn, h('button', { class: 'btn', type: 'button', onclick: renderErrors }, 'New data ↻')),
-      h('div', { class: 'solution' },
-        h('h4', {}, 'How the total error is calculated'),
-        h('ol', {},
-          h('li', { html: `<b>Error</b> for each point = actual ${V('y')} − line's ${V('y')}. Above the line it's positive, below it's negative.` }),
-          h('li', { html: `<b>Square</b> each error. This makes every error positive, so misses above and below can't cancel out, and it makes big misses count much more than small ones. Switch to <i>Squares</i> to see them as actual squares.` }),
-          h('li', { html: `<b>Add</b> the squares → the <b>total squared error</b>. The smaller the total, the better the line fits.` }),
-          h('li', { html: `<b>RMS error</b> = √(total ÷ number of points). Dividing by the number of points gives the average square, and the square root turns it back into ${V('y')}-units.` })),
-        h('p', {}, 'Why not just add up the errors? Positive and negative errors cancel, so a line that is badly tilted can still add up to zero!')));
+      how);
     app.replaceChildren(topicHeader(ERRORS, 'Advanced 2'), host);
   }
 

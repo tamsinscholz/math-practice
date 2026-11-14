@@ -245,8 +245,9 @@ a.card:hover { border-color: var(--accent); transform: translateY(-1px); }
 .err-legend { font-weight: 500; margin-top: 6px; }
 .err-above { color: var(--accent); }
 .err-below { color: var(--bad); }
-.err-panel { flex: 1 1 220px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
-.err-panel .choice { margin-bottom: 10px; }
+.err-side { flex: 1 1 220px; display: flex; flex-direction: column; align-items: flex-start; gap: 14px; }
+.err-panel { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.err-panel[hidden], .err-legend[hidden] { display: none; }
 .err-panel .err-line { margin: 0; font-size: 15px; color: var(--ink); }
 .err-panel .err-line.muted { color: var(--muted); }
 .err-panel .err-total { margin: 0 0 4px; font-size: 40px; font-weight: 800; color: var(--ink); line-height: 1.1; font-variant-numeric: tabular-nums; }
@@ -282,6 +283,8 @@ a.card:hover { border-color: var(--accent); transform: translateY(-1px); }
 .result.warn { color: var(--warn); }
 .solution { margin-top: 18px; padding: 14px 18px; border-left: 4px solid var(--ok); background: var(--ok-soft); border-radius: 0 var(--radius) var(--radius) 0; }
 .solution h4 { margin: 0 0 8px; }
+.solution.how summary { cursor: pointer; font-weight: 700; color: var(--ok); }
+.solution.how[open] summary { margin-bottom: 8px; }
 .solution ol, .solution ul { padding-left: 22px; margin: 0; }
 .solution li { margin: 6px 0; }
 .solution p { margin: 6px 0; }
