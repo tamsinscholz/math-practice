@@ -507,8 +507,29 @@
     return xs.reduce((s, x, i) => s + (ys[i] - (m * x + b)) ** 2, 0);
   }
 
+  // Sum of absolute vertical errors from the points to y = mx + b.
+  function sumAbs(xs, ys, m, b) {
+    return xs.reduce((s, x, i) => s + Math.abs(ys[i] - (m * x + b)), 0);
+  }
+
+  // The line with the smallest total absolute error. Some best line always
+  // passes through two of the points, so trying every pair finds it.
+  function leastAbsolute(xs, ys) {
+    let best = null;
+    for (let i = 0; i < xs.length; i++) {
+      for (let j = i + 1; j < xs.length; j++) {
+        if (Math.abs(xs[j] - xs[i]) < 1e-9) continue;
+        const m = (ys[j] - ys[i]) / (xs[j] - xs[i]), b = ys[i] - m * xs[i];
+        const t = sumAbs(xs, ys, m, b);
+        if (!best || t < best.total) best = { m, b, total: t };
+      }
+    }
+    return best;
+  }
+
   // About 10 points, one per unit of x with a little jitter, scattered
-  // around a trend. The least-squares line is the smallest error possible.
+  // around a trend. fit/best: least-squares line and its total squared
+  // error; lad/bestAbs: least-absolute line and its total absolute error.
   function genErrorData() {
     const t = randTrend();
     const xs = [], ys = [];
@@ -516,14 +537,14 @@
       const xi = round(x + randReal(-0.3, 0.3), 1);
       xs.push(xi); ys.push(round(noisyY(t, xi, 1.3), 1));
     }
-    const fit = leastSquares(xs, ys);
-    return { xs, ys, fit, best: sumSquares(xs, ys, fit.m, fit.b) };
+    const fit = leastSquares(xs, ys), lad = leastAbsolute(xs, ys);
+    return { xs, ys, fit, best: sumSquares(xs, ys, fit.m, fit.b), lad, bestAbs: lad.total };
   }
 
   const api = {
     randInt, pick, shuffle, round, fmt, money, parseNum, close, niceStep, leastSquares, slopeAt, expr, V, frac,
     genEquations, genGraphs, genDifferences, genVarRoles, genRate, genFit, genFee, genTrend, genCompare,
-    VARIANCE, genVarianceDists, sampleIdx, genFlip, flipPt, unflipLine, sumSquares, genErrorData,
+    VARIANCE, genVarianceDists, sampleIdx, genFlip, flipPt, unflipLine, sumSquares, sumAbs, leastAbsolute, genErrorData,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Problems = api;

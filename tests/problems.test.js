@@ -158,3 +158,13 @@ test('error data: points on the grid, and no nearby line beats least squares', (
 test('sumSquares adds up squared vertical errors', () => {
   assert.equal(P.sumSquares([0, 1, 2], [1, 3, 2], 1, 0), 1 + 4 + 0);
 });
+
+test('least-absolute line: no nearby line has a smaller total absolute error', () => times(() => {
+  const p = P.genErrorData();
+  assert.ok(Math.abs(p.bestAbs - P.sumAbs(p.xs, p.ys, p.lad.m, p.lad.b)) < 1e-9);
+  assert.ok(p.bestAbs <= P.sumAbs(p.xs, p.ys, p.fit.m, p.fit.b) + 1e-9, 'beats least squares on absolutes');
+  for (let k = 0; k < 10; k++) {
+    const dm = (Math.random() - 0.5) * 0.2, db = (Math.random() - 0.5) * 1;
+    assert.ok(P.sumAbs(p.xs, p.ys, p.lad.m + dm, p.lad.b + db) >= p.bestAbs - 1e-9);
+  }
+}));

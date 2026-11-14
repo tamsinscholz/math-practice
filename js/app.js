@@ -904,7 +904,9 @@
     // mode: 'none' (just the line), 'abs' (error bars, absolute totals) or 'sq' (squares, squared totals)
     let mode = 'none', bestShown = false;
     const record = { abs: Infinity, sq: Infinity };
-    const fitAbs = p.xs.reduce((t, x, i) => t + Math.abs(p.ys[i] - (p.fit.m * x + p.fit.b)), 0);
+    // The best line for the current measure: least-absolute for Absolutes, least-squares otherwise.
+    const fitLine = G.el('line', { class: 'g-fit' }, g.plot);
+    const fitCaption = h('p', { class: 'readout err-fit-caption', hidden: true });
 
     // Always one decimal so right-aligned columns line up on the decimal point.
     const d1 = (v) => { const r = P.round(v, 1); return (r < 0 ? '−' : '') + Math.abs(r).toFixed(1); };
@@ -956,22 +958,36 @@
       errSum.textContent = `Total ${d1(sum)}`;
       errSum.className = 'err-sum ' + (P.round(sum, 1) < 0 ? 'below' : 'above');
       sqSum.textContent = `Total ${d1(sse)}`;
-      if (mode === 'abs') {
+      const abs = mode === 'abs';
+      if (abs) {
         label.textContent = 'Total absolute error (sizes of the errors, ignoring + and −)';
         total.textContent = fmt(sae, 1);
-        typical.innerHTML = `Average miss = ${fmt(sae, 1)} ÷ ${n} ≈ <b>${fmt(sae / n, 2)}</b> — a typical point is about this far from your line.`;
+        typical.innerHTML = `Average miss (MAE) = ${fmt(sae, 1)} ÷ ${n} ≈ <b>${fmt(sae / n, 2)}</b> — a typical point is about this far from your line.`;
       } else {
         label.textContent = 'Total squared error';
         total.textContent = fmt(sse, 1);
-        typical.innerHTML = `RMS error = √(${fmt(sse, 1)} ÷ ${n}) ≈ <b>${fmt(Math.sqrt(sse / n), 2)}</b> — a typical point is about this far from your line.`;
+        typical.innerHTML = `RMS error (RMSE) = √(${fmt(sse, 1)} ÷ ${n}) ≈ <b>${fmt(Math.sqrt(sse / n), 2)}</b> — a typical point is about this far from your line.`;
       }
-      const near = Math.round(100 * p.best / sse);
+      const near = Math.round(100 * (abs ? p.bestAbs / sae : p.best / sse));
       bar.style.width = near + '%';
-      pct.textContent = `${near}% of the way to the line of best fit`;
-      best.textContent = `Your lowest total so far: ${fmt(mode === 'abs' ? record.abs : record.sq, 1)}`
-        + (bestShown ? ` · line of best fit: ${fmt(mode === 'abs' ? fitAbs : p.best, 1)}` : '');
-      note.textContent = near >= 99 ? 'You found the line of best fit — no other line has a smaller total squared error!'
-        : near >= 90 ? 'Very close! Nudge the handles a little and watch the total.' : '';
+      pct.textContent = `${near}% of the way to the smallest possible total`;
+      best.textContent = `Your lowest total so far: ${fmt(abs ? record.abs : record.sq, 1)}`
+        + (bestShown ? ` · smallest possible: ${fmt(abs ? p.bestAbs : p.best, 1)}` : '');
+      note.textContent = near < 90 ? ''
+        : near < 99 ? 'Very close! Nudge the handles a little and watch the total.'
+          : abs ? 'You found the best line for absolute errors — no other line has a smaller total absolute error!'
+            : 'You found the line of best fit — no other line has a smaller total squared error!';
+
+      if (bestShown) {
+        const f = abs ? p.lad : p.fit;
+        fitLine.setAttribute('x1', g.X(VIEW.xMin)); fitLine.setAttribute('y1', g.Y(f.b + f.m * VIEW.xMin));
+        fitLine.setAttribute('x2', g.X(VIEW.xMax)); fitLine.setAttribute('y2', g.Y(f.b + f.m * VIEW.xMax));
+        fitCaption.innerHTML = abs
+          ? 'Dashed: the <b>least-absolute line</b>, the line with the smallest total absolute error.'
+          : 'Dashed: the <b>least-squares line</b>, the line with the smallest total squared error (the usual line of best fit).';
+      }
+      fitLine.style.display = bestShown ? '' : 'none';
+      fitCaption.hidden = !bestShown;
     }
 
     const at = dragLine(g, VIEW, [{ x: p.xs[0], y: mean }, { x: p.xs[n - 1], y: mean }], update);
@@ -988,7 +1004,6 @@
       class: 'btn', type: 'button',
       onclick() {
         bestShown = true; bestBtn.disabled = true;
-        g.seg(VIEW.xMin, p.fit.b, VIEW.xMax, p.fit.b + p.fit.m * VIEW.xMax, 'g-fit');
         update();
       },
     }, 'Show the best line');
@@ -1002,14 +1017,19 @@
           <i>Absolutes</i> shows each error as a bar and adds up their sizes, ignoring the signs.` }),
         h('li', { html: `<b>Square</b> each error. This makes every error positive, so misses above and below can't cancel out, and it makes big misses count much more than small ones. Switch to <i>Squares</i> to see them as actual squares.` }),
         h('li', { html: `<b>Add</b> the squares → the <b>total squared error</b>. The smaller the total, the better the line fits.` }),
-        h('li', { html: `<b>RMS error</b> = √(total ÷ number of points). Dividing by the number of points gives the average square, and the square root turns it back into ${V('y')}-units.` })),
-      h('p', {}, 'Why not just add up the errors? Watch the Total on the Error row: positive and negative errors cancel, so a badly tilted line through the middle of the points can still add up to zero. (The line of best fit always adds up to zero too, so a zero total alone doesn’t mean the line is good.)'));
+        h('li', { html: `<b>RMS error</b> = √(total ÷ number of points). Dividing by the number of points gives the average square, and the square root turns it back into ${V('y')}-units.` }),
+        h('li', { html: `<b>MAE vs RMSE.</b> The average miss (<b>MAE</b>, mean absolute error) and the RMS error (<b>RMSE</b>) both describe a typical miss, but they weigh misses differently.
+          Squaring makes big misses count extra, so RMSE is never smaller than MAE, and the gap grows when a few points are far from the line.
+          That's also why the two best lines can differ: the least-squares line gets pulled toward far-away points (<i>outliers</i>), while the least-absolute line mostly ignores them.
+          Use <b>MAE</b> when every miss matters equally, or when a few odd points (a typo, a broken sensor) shouldn't drag the line around.
+          Use <b>RMSE</b> when one big miss is much worse than several small ones (e.g. a bridge that must hold every load). Least squares is also the standard line of best fit, the one calculators and spreadsheets give you.` })),
+      h('p', {}, 'Why not just add up the errors? Watch the Total on the Error row: positive and negative errors cancel, so a badly tilted line through the middle of the points can still add up to zero. (The least-squares line always adds up to zero too, so a zero total alone doesn’t mean the line is good.)'));
 
     const host = h('div', { class: 'card problem' },
       h('p', { class: 'prompt' }, h('b', {}, 'Drag the two orange handles'), ' to place your line of best fit. ',
         'Then switch on ', h('i', {}, 'Absolutes'), ' or ', h('i', {}, 'Squares'), ' to measure how far off it is, and make the total as small as you can.'),
       h('div', { class: 'split' },
-        h('div', { class: 'graph-box' }, g.svg, legend),
+        h('div', { class: 'graph-box' }, g.svg, legend, fitCaption),
         h('div', { class: 'err-side' },
           h('span', { class: 'field choice', role: 'group', 'aria-label': 'how to show the errors' }, segs),
           panel)),
