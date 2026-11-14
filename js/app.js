@@ -903,11 +903,13 @@
     const mean = p.ys.reduce((t, y) => t + y, 0) / n;
     let squares = false, record = Infinity, bestShown = false;
 
+    // Always one decimal so right-aligned columns line up on the decimal point.
+    const d1 = (v) => { const r = P.round(v, 1); return (r < 0 ? '−' : '') + Math.abs(r).toFixed(1); };
     const cells = ['line', 'err', 'sq'].map(() => p.xs.map(() => h('td', {})));
     const sumCell = h('td', { class: 'err-sum' });
     const table = h('table', { class: 'data horiz err-table' }, h('tbody', {},
-      h('tr', {}, h('th', {}, h('var', {}, 'x')), p.xs.map((x) => h('td', {}, fmt(x, 1))), h('td', { class: 'err-sum' })),
-      h('tr', {}, h('th', {}, 'Actual ', h('var', {}, 'y')), p.ys.map((y) => h('td', {}, fmt(y, 1))), h('td', { class: 'err-sum' })),
+      h('tr', {}, h('th', {}, h('var', {}, 'x')), p.xs.map((x) => h('td', {}, d1(x))), h('td', { class: 'err-sum' })),
+      h('tr', {}, h('th', {}, 'Actual ', h('var', {}, 'y')), p.ys.map((y) => h('td', {}, d1(y))), h('td', { class: 'err-sum' })),
       h('tr', {}, h('th', {}, 'Line’s ', h('var', {}, 'y')), cells[0], h('td', { class: 'err-sum' })),
       h('tr', {}, h('th', {}, 'Error'), cells[1], h('td', { class: 'err-sum' })),
       h('tr', {}, h('th', {}, 'Error²'), cells[2], sumCell)));
@@ -932,12 +934,12 @@
           G.el('rect', { x: left, y: Math.min(py, ly), width: side, height: side, class: `g-sq ${cls}` }, marks);
         }
         G.el('line', { x1: px, x2: px, y1: py, y2: ly, class: `g-err ${cls}` }, marks);
-        cells[0][i].textContent = fmt(ls[i], 1);
-        cells[1][i].textContent = fmt(errs[i], 1);
+        cells[0][i].textContent = d1(ls[i]);
+        cells[1][i].textContent = d1(errs[i]);
         cells[1][i].className = cls;
-        cells[2][i].textContent = fmt(errs[i] ** 2, 1);
+        cells[2][i].textContent = d1(errs[i] ** 2);
       });
-      sumCell.textContent = `Total ${fmt(sse, 1)}`;
+      sumCell.textContent = `Total ${d1(sse)}`;
       total.textContent = fmt(sse, 1);
       rms.innerHTML = `RMS error = √(${fmt(sse, 1)} ÷ ${n}) ≈ <b>${fmt(Math.sqrt(sse / n), 2)}</b> — a typical point is about this far from your line.`;
       const near = Math.round(100 * p.best / sse);
