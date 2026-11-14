@@ -219,6 +219,22 @@ a.card:hover { border-color: var(--accent); transform: translateY(-1px); }
 .explorer p { margin: 0 0 4px; font-size: 14px; }
 .explorer input[type="range"] { width: 100%; accent-color: var(--accent-2); }
 
+/* ---------- advanced: variance ---------- */
+.dist-tag { font-weight: 700; }
+.dist-tag::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; background: currentColor; vertical-align: 1px; }
+.g-pop .g-pt { fill: currentColor; opacity: .4; }
+.g-pop.k1 { color: var(--accent); }
+.g-pop.k2 { color: var(--accent-2); }
+.g-try { fill: none; stroke-width: 2.25; stroke-opacity: .85; }
+.g-try.k1 { stroke: var(--accent); }
+.g-try.k2 { stroke: var(--accent-2); }
+.problem > .progress:first-child { margin: 0 0 14px; }
+.var-h { margin: 0 0 6px; }
+.var-pair { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr)); gap: 18px; margin-top: 14px; }
+.var-fig { align-items: stretch; }
+.var-fig .graph { max-width: none; }
+.var-fig figcaption { color: var(--ink); }
+
 /* ---------- actions + feedback ---------- */
 .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 22px; }
 .btn {

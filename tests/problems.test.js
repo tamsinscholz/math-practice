@@ -112,3 +112,35 @@ test('variable roles: five distinct pairs, independent not always on one side', 
   assert.ok(items.some((i) => i.indLeft) && items.some((i) => !i.indLeft));
   for (const it of items) assert.ok(it.ind && it.dep && it.why && it.ind !== it.dep);
 }));
+
+test('variance: one tight and one wide population, all points on the grid', () => {
+  for (let k = 0; k < 200; k++) {
+    const ds = P.genVarianceDists();
+    const { n, xMax, yMax, sds } = P.VARIANCE;
+    assert.deepEqual(ds.map((d) => d.sd).sort((a, b) => a - b), sds);
+    for (const d of ds) {
+      assert.equal(d.pts.length, n);
+      for (const [x, y] of d.pts) assert.ok(x > 0 && x < xMax && y > 0 && y < yMax, `${x}, ${y}`);
+      assert.ok(Number.isFinite(d.fit.m) && Number.isFinite(d.fit.b));
+    }
+  }
+});
+
+test('variance: samples are distinct indices into the population', () => times(() => {
+  const s = P.sampleIdx(P.VARIANCE.n, P.VARIANCE.sample);
+  assert.equal(s.length, P.VARIANCE.sample);
+  assert.equal(new Set(s).size, s.length);
+  for (const i of s) assert.ok(Number.isInteger(i) && i >= 0 && i < P.VARIANCE.n);
+}));
+
+test('variance: a line fitted on flipped axes maps back onto the original points', () => times(() => {
+  const flip = P.genFlip();
+  const m = (Math.random() - 0.5) * 4, b = Math.random() * 12;
+  const line = P.unflipLine(m, b, flip);
+  for (const x of [0, 2.5, 7, 10]) {
+    // A point on the line as drawn on the flipped plot…
+    const [ox, oy] = P.flipPt([x, m * x + b], flip); // mirroring is its own inverse
+    // …lies on the unflipped line in original coordinates.
+    assert.ok(Math.abs(line.m * ox + line.b - oy) < 1e-9, `${flip} at ${x}`);
+  }
+}));

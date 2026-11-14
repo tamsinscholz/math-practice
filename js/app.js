@@ -144,6 +144,43 @@
     host.append(body, h('div', { class: 'actions' }, checkBtn, solBtn, nextBtn), result, solution);
   }
 
+  // ---------- draggable line ----------
+  // Two handles hs = [{ x, y }, { x, y }] define a line drawn across the view v.
+  // onMove runs after every drag or arrow-key step. Returns the line as x → y.
+  function dragLine(g, v, hs, onMove) {
+    const line = G.el('line', { class: 'g-user' }, g.plot);
+    const at = (x) => hs[0].y + (hs[1].y - hs[0].y) / (hs[1].x - hs[0].x) * (x - hs[0].x);
+    const draw = () => {
+      line.setAttribute('x1', g.X(v.xMin)); line.setAttribute('y1', g.Y(at(v.xMin)));
+      line.setAttribute('x2', g.X(v.xMax)); line.setAttribute('y2', g.Y(at(v.xMax)));
+      hs.forEach((hd) => { hd.node.setAttribute('transform', `translate(${g.X(hd.x)} ${g.Y(hd.y)})`); });
+    };
+    hs.forEach((hd, i) => {
+      hd.node = G.el('g', { class: 'g-handle', tabindex: 0, role: 'slider', 'aria-label': `line handle ${i + 1}` }, g.over);
+      G.el('circle', { r: 18, class: 'g-hit' }, hd.node);
+      G.el('circle', { r: 7.5 }, hd.node);
+      hd.node.addEventListener('pointerdown', (e) => { hd.node.setPointerCapture(e.pointerId); hd.drag = true; e.preventDefault(); });
+      hd.node.addEventListener('pointerup', () => { hd.drag = false; });
+      hd.node.addEventListener('pointermove', (e) => {
+        if (!hd.drag) return;
+        const d = g.toData(e), other = hs[1 - i];
+        const x = Math.min(v.xMax - 0.1, Math.max(v.xMin + 0.1, d.x));
+        if (Math.abs(x - other.x) >= 0.5) hd.x = x;
+        hd.y = Math.min(v.yMax, Math.max(v.yMin, d.y));
+        onMove(); draw();
+      });
+      hd.node.addEventListener('keydown', (e) => {
+        const step = v.yGrid / 10;
+        if (e.key === 'ArrowUp') hd.y = Math.min(v.yMax, hd.y + step);
+        else if (e.key === 'ArrowDown') hd.y = Math.max(v.yMin, hd.y - step);
+        else return;
+        e.preventDefault(); onMove(); draw();
+      });
+    });
+    draw();
+    return at;
+  }
+
   // ---------- topics ----------
   const TOPICS = [];
 
@@ -366,43 +403,12 @@
 
       // Two draggable handles define the student's line.
       const mean = p.ys.reduce((s, y) => s + y, 0) / p.ys.length;
-      const hs = [{ x: p.xs[0], y: mean }, { x: p.xs[p.xs.length - 1], y: mean }];
-      const line = G.el('line', { class: 'g-user' }, g.plot);
       let moved = false;
-      const draw = () => {
-        const m = (hs[1].y - hs[0].y) / (hs[1].x - hs[0].x);
-        const at = (x) => hs[0].y + m * (x - hs[0].x);
-        line.setAttribute('x1', g.X(v.xMin)); line.setAttribute('y1', g.Y(at(v.xMin)));
-        line.setAttribute('x2', g.X(v.xMax)); line.setAttribute('y2', g.Y(at(v.xMax)));
-        hs.forEach((hd) => { hd.node.setAttribute('transform', `translate(${g.X(hd.x)} ${g.Y(hd.y)})`); });
-      };
-      hs.forEach((hd, i) => {
-        hd.node = G.el('g', { class: 'g-handle', tabindex: 0, role: 'slider', 'aria-label': `line handle ${i + 1}` }, g.over);
-        G.el('circle', { r: 18, class: 'g-hit' }, hd.node);
-        G.el('circle', { r: 7.5 }, hd.node);
-        hd.node.addEventListener('pointerdown', (e) => { hd.node.setPointerCapture(e.pointerId); hd.drag = true; e.preventDefault(); });
-        hd.node.addEventListener('pointerup', () => { hd.drag = false; });
-        hd.node.addEventListener('pointermove', (e) => {
-          if (!hd.drag) return;
-          const d = g.toData(e), other = hs[1 - i];
-          const x = Math.min(v.xMax - 0.1, Math.max(v.xMin + 0.1, d.x));
-          if (Math.abs(x - other.x) >= 0.5) hd.x = x;
-          hd.y = Math.min(v.yMax, Math.max(v.yMin, d.y));
-          moved = true; clearMark(box); draw();
-        });
-        hd.node.addEventListener('keydown', (e) => {
-          const step = v.yGrid / 10;
-          if (e.key === 'ArrowUp') hd.y = Math.min(v.yMax, hd.y + step);
-          else if (e.key === 'ArrowDown') hd.y = Math.max(v.yMin, hd.y - step);
-          else return;
-          e.preventDefault(); moved = true; clearMark(box); draw();
-        });
-      });
-      draw();
+      const userAt = dragLine(g, v, [{ x: p.xs[0], y: mean }, { x: p.xs[p.xs.length - 1], y: mean }],
+        () => { moved = true; clearMark(box); });
 
       const feedback = h('p', { class: 'fit-feedback' });
       const box = h('div', { class: 'graph-box fit-box' }, g.svg, feedback);
-      const userAt = (x) => hs[0].y + (hs[1].y - hs[0].y) / (hs[1].x - hs[0].x) * (x - hs[0].x);
       const fitAt = (x) => p.fit.m * x + p.fit.b;
       const range = Math.max(...p.ys) - Math.min(...p.ys);
       const lineField = {
@@ -690,7 +696,11 @@
           h('span', { class: 'ref' }, `Like review ${t.ref}`),
           h('h3', {}, t.title),
           h('p', {}, t.blurb),
-          statLine(t.id)))),
+          statLine(t.id))),
+        h('a', { class: 'card', href: '#/advanced' },
+          h('span', { class: 'ref' }, 'Advanced'),
+          h('h3', {}, 'Variance & lines of best fit'),
+          h('p', {}, 'Why do lines of best fit vary more when the data is spread out?'))),
     );
   }
 
@@ -748,12 +758,134 @@
     step();
   }
 
+  // ---------- advanced: variance ----------
+  // Fit a line to small samples drawn alternately from two populations, then
+  // compare how much the fitted lines vary. Populations, fits and the sample
+  // on screen are kept in localStorage so a reload picks up where it left off.
+  const VR = P.VARIANCE, VSTORE = 'linear-relations-variance';
+  const VTOTAL = 2 * VR.rounds, VNAMES = ['A', 'B'];
+  const VIEW = { xMin: 0, xMax: VR.xMax, yMin: 0, yMax: VR.yMax, yGrid: 1 };
+  const ADVANCED = {
+    title: 'Variance: how much does a line of best fit wobble?',
+    idea: `A scatter plot usually shows a <b>sample</b> — a few points out of a much bigger <b>population</b>.
+      A different sample gives a slightly different line of best fit. <b>Variance</b> measures how spread out the points are around the trend.
+      When the variance is <b>large</b>, two samples can lean quite differently, so their lines of best fit <b>vary more</b>.
+      You'll fit ${VTOTAL} lines, switching between distributions A and B, then see all of your lines together.`,
+  };
+
+  function loadVariance() {
+    try {
+      const s = JSON.parse(localStorage.getItem(VSTORE));
+      if (s && Array.isArray(s.fits) && s.dists?.length === 2 && s.dists.every((d) => d.pts?.length === VR.n)) return s;
+    } catch { /* fall through to fresh distributions */ }
+    return null;
+  }
+  function saveVariance(s) {
+    try { localStorage.setItem(VSTORE, JSON.stringify(s)); } catch { /* storage blocked: just not remembered */ }
+  }
+  function freshVariance() {
+    try { localStorage.removeItem(VSTORE); } catch { /* ignore */ }
+    const s = { dists: P.genVarianceDists(), fits: [], sample: null, flip: null };
+    saveVariance(s);
+    return s;
+  }
+
+  const varPlot = (width, height) => G.make({ xMin: 0, xMax: VR.xMax, yMin: 0, yMax: VR.yMax, xGrid: 1, yGrid: 1, xLabel: 2, yLabel: 2, width, height });
+  const distTag = (d) => h('span', { class: `dist-tag k${d + 1}` }, `Distribution ${VNAMES[d]}`);
+
+  function renderAdvanced() {
+    let s = loadVariance() || freshVariance();
+    const host = h('div', { class: 'card problem' });
+    const restartBtn = (primary) => h('button', {
+      class: primary ? 'btn primary' : 'btn', type: 'button',
+      onclick() { s = freshVariance(); draw(); window.scrollTo(0, 0); },
+    }, 'Restart with new distributions ↻');
+
+    const fitStep = () => {
+      const k = s.fits.length, d = k % 2, dist = s.dists[d];
+      if (!s.sample || !s.flip) { s.sample = P.sampleIdx(VR.n, VR.sample); s.flip = P.genFlip(); saveVariance(s); }
+      const flip = s.flip;
+      const pts = s.sample.map((i) => P.flipPt(dist.pts[i], flip));
+      const g = varPlot(460, 380);
+      pts.forEach(([x, y]) => g.dot(x, y));
+      const xs = pts.map((pt) => pt[0]);
+      const mean = pts.reduce((t, pt) => t + pt[1], 0) / pts.length;
+      const at = dragLine(g, VIEW, [{ x: Math.min(...xs), y: mean }, { x: Math.max(...xs), y: mean }], () => { save.disabled = false; });
+      const save = h('button', {
+        class: 'btn primary', type: 'button', disabled: true,
+        onclick() {
+          // The student fitted the flipped plot; store the line on the original axes.
+          const { m, b } = P.unflipLine(at(1) - at(0), at(0), flip);
+          s.fits.push({ d, sample: s.sample, flip, m: P.round(m, 4), b: P.round(b, 4) });
+          s.sample = s.flip = null;
+          saveVariance(s);
+          draw();
+        },
+      }, k === VTOTAL - 1 ? 'Save line & see results →' : 'Save this line →');
+      const done = [0, 1].map((j) => s.fits.filter((f) => f.d === j).length);
+      host.replaceChildren(
+        h('div', { class: 'progress', role: 'progressbar', 'aria-valuemin': 0, 'aria-valuemax': VTOTAL, 'aria-valuenow': k },
+          h('span', { style: `width:${100 * k / VTOTAL}%` })),
+        h('p', { class: 'prompt' }, `Fit ${k + 1} of ${VTOTAL} · `, distTag(d),
+          h('span', { class: 'muted' }, ` (A: ${done[0]} of ${VR.rounds} done · B: ${done[1]} of ${VR.rounds} done)`)),
+        h('p', {}, `These ${VR.sample} points are a random sample from distribution ${VNAMES[d]}. `,
+          h('b', {}, 'Drag the two orange handles'), ' to place your line of best fit, then save it.'),
+        h('div', { class: 'graph-box' }, g.svg),
+        h('div', { class: 'actions' }, save, restartBtn(false)),
+      );
+    };
+
+    const results = () => {
+      const stats = [0, 1].map((d) => {
+        const ms = s.fits.filter((f) => f.d === d).map((f) => f.m);
+        return { lo: Math.min(...ms), hi: Math.max(...ms), range: Math.max(...ms) - Math.min(...ms) };
+      });
+      const wide = s.dists[0].sd > s.dists[1].sd ? 0 : 1, tight = 1 - wide;
+      const figs = [0, 1].map((d) => {
+        const g = varPlot(420, 360);
+        const pop = G.el('g', { class: `g-pop k${d + 1}` }, g.plot);
+        s.dists[d].pts.forEach(([x, y]) => g.dot(x, y, 'g-pt', 2.6, pop));
+        s.fits.filter((f) => f.d === d).forEach((f) => g.seg(0, f.b, VR.xMax, f.b + f.m * VR.xMax, `g-try k${d + 1}`));
+        const { m, b } = s.dists[d].fit;
+        g.seg(0, b, VR.xMax, b + m * VR.xMax, 'g-fit');
+        const st = stats[d];
+        return h('figure', { class: 'mini var-fig' },
+          h('figcaption', {}, distTag(d), d === wide ? ' · more spread out' : ' · less spread out'),
+          g.svg,
+          h('p', { class: 'readout' }, `Slopes of your ${VR.rounds} lines: ${fmt(st.lo)} to ${fmt(st.hi)} `,
+            h('span', { class: 'muted' }, `(a range of ${fmt(st.range)})`)));
+      });
+      const W = VNAMES[wide], T = VNAMES[tight];
+      const asExpected = stats[wide].range > stats[tight].range;
+      host.replaceChildren(
+        h('h2', { class: 'var-h' }, 'All of your lines'),
+        h('p', {}, `Each graph shows the whole distribution (all ${VR.n} points), your ${VR.rounds} lines on top, and the dashed line of best fit for the whole distribution.`),
+        h('div', { class: 'var-pair' }, figs),
+        h('div', { class: 'solution' },
+          h('h4', {}, 'What happened?'),
+          h('p', { html: `The points in distribution <b>${W}</b> are much more spread out around the trend — it has a <b>larger variance</b> than distribution <b>${T}</b>.
+            Each sample of ${VR.sample} points from ${W} can lean a different way, so a line of best fit through one sample can be quite different from the next.` }),
+          h('p', {
+            html: asExpected
+              ? `That's what your lines show: the slopes for ${W} ranged by <b>${fmt(stats[wide].range)}</b>, compared with only <b>${fmt(stats[tight].range)}</b> for ${T}. The lines for ${W} fan out much more.`
+              : `This time your slopes for ${W} ranged by <b>${fmt(stats[wide].range)}</b> and for ${T} by <b>${fmt(stats[tight].range)}</b> — not the pattern we'd expect. With only ${VR.rounds} samples each, that can happen by chance. Try again with new distributions!`,
+          }),
+          h('p', {}, 'Takeaway: the more spread out the data, the less you should trust a line of best fit drawn from only a few points.')),
+        h('div', { class: 'actions' }, restartBtn(true), h('a', { class: 'btn', href: '#/' }, 'Home')),
+      );
+    };
+
+    const draw = () => (s.fits.length < VTOTAL ? fitStep : results)();
+    app.replaceChildren(topicHeader(ADVANCED, 'Advanced'), host);
+    draw();
+  }
+
   // Built once so the strip keeps its scroll position; only the active chip changes.
   let navBuilt = false;
   function renderNav(active) {
     if (!navBuilt) {
       const link = (href, label, key) => h('a', { href, 'data-key': key }, label);
-      nav.replaceChildren(link('#/', 'Home', 'home'), ...TOPICS.map((t) => link(`#/topic/${t.id}`, t.short, t.id)), link('#/test', 'Practice test', 'test'));
+      nav.replaceChildren(link('#/', 'Home', 'home'), ...TOPICS.map((t) => link(`#/topic/${t.id}`, t.short, t.id)), link('#/test', 'Practice test', 'test'), link('#/advanced', 'Advanced', 'advanced'));
     }
     let current = null;
     for (const a of nav.children) {
@@ -773,6 +905,7 @@
     const [view, id] = location.hash.replace(/^#\/?/, '').split('/');
     if (view === 'topic' && byId[id]) { renderNav(id); renderTopic(byId[id]); }
     else if (view === 'test') { renderNav('test'); renderTest(); }
+    else if (view === 'advanced') { renderNav('advanced'); renderAdvanced(); }
     else { renderNav('home'); renderHome(); }
     window.scrollTo(0, 0);
   }

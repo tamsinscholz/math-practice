@@ -446,9 +446,53 @@
     return { items };
   }
 
+  // ---------- Advanced: variance ----------
+  // Two populations of points around a straight trend on a 0–10 × 0–12 grid:
+  // one tightly packed, one widely spread. Shuffled so the wide one isn't
+  // always B.
+  const VARIANCE = { n: 60, sample: 8, rounds: 5, xMax: 10, yMax: 12, sds: [0.5, 2] };
+
+  function randNormal() {
+    let u = 0;
+    while (u === 0) u = Math.random();
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * Math.random());
+  }
+
+  function genPopulation(sd) {
+    const { n, xMax, yMax } = VARIANCE;
+    let y0, y10;
+    do { y0 = randReal(2.5, 9.5); y10 = randReal(2.5, 9.5); } while (Math.abs(y10 - y0) < 3);
+    const m = (y10 - y0) / xMax;
+    const pts = [];
+    while (pts.length < n) {
+      const x = randReal(0.3, xMax - 0.3), y = y0 + m * x + sd * randNormal();
+      if (y > 0.2 && y < yMax - 0.2) pts.push([round(x), round(y)]);
+    }
+    return { sd, pts, fit: leastSquares(pts.map((p) => p[0]), pts.map((p) => p[1])) };
+  }
+
+  function genVarianceDists() { return shuffle(VARIANCE.sds).map(genPopulation); }
+
+  // k distinct indices out of 0..n-1.
+  function sampleIdx(n, k) { return shuffle([...Array(n).keys()]).slice(0, k); }
+
+  // Samples are shown with the x and/or y axis mirrored (x → xMax − x,
+  // y → yMax − y) so repeats from one distribution are harder to spot.
+  function genFlip() { return [rand01(), rand01()]; }
+  function flipPt([x, y], [fx, fy]) {
+    return [fx ? VARIANCE.xMax - x : x, fy ? VARIANCE.yMax - y : y];
+  }
+  // A line y = mx + b drawn on the mirrored plot, as a line on the original axes.
+  function unflipLine(m, b, [fx, fy]) {
+    if (fx) { b += m * VARIANCE.xMax; m = -m; }
+    if (fy) { b = VARIANCE.yMax - b; m = -m; }
+    return { m, b };
+  }
+
   const api = {
     randInt, pick, shuffle, round, fmt, money, parseNum, close, niceStep, leastSquares, slopeAt, expr, V, frac,
     genEquations, genGraphs, genDifferences, genVarRoles, genRate, genFit, genFee, genTrend, genCompare,
+    VARIANCE, genVarianceDists, sampleIdx, genFlip, flipPt, unflipLine,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Problems = api;
