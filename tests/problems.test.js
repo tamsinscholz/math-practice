@@ -104,3 +104,11 @@ test('comparing plans: intersection and cheaper ranges are right', () => times((
   }
   assert.ok(p.story.includes(A.name) && p.story.includes(B.name));
 }));
+
+test('variable roles: five distinct pairs, independent not always on one side', () => times(() => {
+  const { items } = P.genVarRoles();
+  assert.equal(items.length, 5);
+  assert.equal(new Set(items.map((i) => i.ind)).size, 5);
+  assert.ok(items.some((i) => i.indLeft) && items.some((i) => !i.indLeft));
+  for (const it of items) assert.ok(it.ind && it.dep && it.why && it.ind !== it.dep);
+}));

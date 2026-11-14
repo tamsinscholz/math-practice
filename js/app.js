@@ -228,6 +228,61 @@
     },
   });
 
+  // Independent vs dependent — one small table per pair.
+  // Each pair is one field, so choosing a role for one variable sets the
+  // other's role too and the two can never both be I or both be D.
+  const ROLE = { I: 'independent', D: 'dependent' };
+  const other = (r) => (r === 'I' ? 'D' : 'I');
+
+  function pairRadios(it, i) {
+    const names = it.indLeft ? [it.ind, it.dep] : [it.dep, it.ind];
+    const answer = it.indLeft ? ['I', 'D'] : ['D', 'I'];
+    let value = ['', ''];
+    const radios = names.map((name, k) => ['I', 'D'].map((r) => h('input', {
+      type: 'radio', name: `role-${i}-${k}`, value: r, 'aria-label': `${letter(i)}) ${name}: ${ROLE[r]}`,
+      onchange() {
+        value = k === 0 ? [r, other(r)] : [other(r), r];
+        radios.forEach((rs, j) => rs.forEach((x) => { x.checked = x.value === value[j]; }));
+        clearMark(el);
+      },
+    })));
+    const el = h('table', { class: 'data roles' },
+      h('thead', {}, h('tr', {},
+        h('th', { class: 'var-name' }, h('span', { class: 'tag' }, letter(i) + ')')),
+        h('th', { class: 'role-cell', title: 'independent' }, 'I'), h('th', { class: 'role-cell', title: 'dependent' }, 'D'))),
+      h('tbody', {}, names.map((name, k) => h('tr', {},
+        h('td', { class: 'var-name' }, name),
+        radios[k].map((x) => h('td', { class: 'role-cell' }, h('label', {}, x)))))));
+    return {
+      el,
+      filled: () => value[0] !== '',
+      check() { const ok = value[0] === answer[0]; mark(el, ok); return ok; },
+      reveal() {
+        if (el.classList.contains('ok')) return;
+        radios.forEach((rs, k) => rs.forEach((x) => x.parentNode.parentNode.classList.toggle('answer', x.value === answer[k])));
+      },
+    };
+  }
+
+  TOPICS.push({
+    id: 'vars', short: 'Indep. vs Dep.', ref: 'Q4–5 warm-up', title: 'Independent or dependent variable?',
+    blurb: 'Which quantity depends on the other?',
+    idea: `The <b>independent</b> variable (<b>I</b>) is the one you choose or that changes on its own — it goes on the horizontal axis (${V('x')}).
+      The <b>dependent</b> variable (<b>D</b>) is the one whose value <i>depends on it</i> — it goes on the vertical axis (${V('y')}).
+      Ask: <i>“Which one is affected by the other?”</i> The sentence order can fool you — the independent variable is not always named first.`,
+    gen: P.genVarRoles,
+    mount(el, p) {
+      const fields = p.items.map(pairRadios);
+      el.append(
+        h('p', { class: 'prompt' }, 'For each pair of variables, decide which is the independent variable (I) and which is the dependent variable (D).'),
+        h('div', { class: 'role-cards' }, fields.map((f) => f.el)),
+      );
+      return { fields };
+    },
+    explain: (p) => `<ol type="a">${p.items.map((it) =>
+      `<li><b>Independent:</b> ${it.ind}. <b>Dependent:</b> ${it.dep}. ${it.why}</li>`).join('')}</ol>`,
+  });
+
   // Q4–5 — rate of change & initial value
   TOPICS.push({
     id: 'rate', short: 'Rate & initial value', ref: 'Q4–5', title: 'Rate of change & initial value',

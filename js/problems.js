@@ -417,9 +417,38 @@
     }
   }
 
+  // ---------- Independent vs dependent variables ----------
+  // [independent, dependent, why]: the dependent quantity is the one that
+  // changes *because of* the other, whichever is named first in a sentence.
+  const VAR_PAIRS = [
+    ['the number of minutes running', 'the amount of calories burned', 'Running longer burns more calories; the calories burned depend on the time.'],
+    ['the number of questions answered incorrectly', 'the grade made on a math test', 'The grade depends on how many questions were missed, not the other way around.'],
+    ['the number of yards mowed', 'the amount of money earned', 'Pay is earned for the yards mowed, so the money depends on the number of yards.'],
+    ['the number of gallons of gas put in the car', 'the number of miles the car is able to drive', 'How far the car can drive depends on how much gas is in it.'],
+    ['the side length of a square', 'the perimeter of the square', 'Once you choose the side length, the perimeter is determined.'],
+    ['the number of hours worked', 'the amount of pay received', 'Pay depends on the hours worked.'],
+    ['the number of tickets sold', 'the profit made', 'Profit depends on how many tickets are sold.'],
+    ['the number of days since planting', 'the height of a sunflower', 'The height depends on how much time has passed. Time is not changed by the plant.'],
+    ['the number of pizzas ordered', 'the total cost of the order', 'The total cost depends on how many pizzas are ordered.'],
+    ['the time spent streaming video', 'the battery percentage left on a phone', 'The battery level depends on how long the phone has been streaming.'],
+    ['the radius of a circle', 'the area of the circle', 'The area is determined by the radius.'],
+    ['the number of hours of studying', 'the score on a quiz', 'The score depends on the studying done beforehand.'],
+    ['the distance travelled by a taxi', 'the fare', 'The fare depends on how far the taxi travels.'],
+    ['the number of guests at a party', 'the amount of food needed', 'The amount of food depends on the number of guests.'],
+    ['the number of months since joining a gym', 'the total amount paid to the gym', 'The total paid depends on how many months have passed.'],
+    ['the speed of a car', 'the time it takes to travel 100 km', 'The travel time depends on the speed driven.'],
+  ];
+
+  function genVarRoles() {
+    const items = shuffle(VAR_PAIRS).slice(0, 5).map(([ind, dep, why]) => ({ ind, dep, why, indLeft: rand01() }));
+    // Make sure the independent variable isn't always on the same side.
+    if (items.every((i) => i.indLeft === items[0].indLeft)) items[0].indLeft = !items[0].indLeft;
+    return { items };
+  }
+
   const api = {
     randInt, pick, shuffle, round, fmt, money, parseNum, close, niceStep, leastSquares, slopeAt, expr, V, frac,
-    genEquations, genGraphs, genDifferences, genRate, genFit, genFee, genTrend, genCompare,
+    genEquations, genGraphs, genDifferences, genVarRoles, genRate, genFit, genFee, genTrend, genCompare,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Problems = api;
