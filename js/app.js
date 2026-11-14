@@ -697,10 +697,14 @@
           h('h3', {}, t.title),
           h('p', {}, t.blurb),
           statLine(t.id))),
-        h('a', { class: 'card', href: '#/advanced' },
-          h('span', { class: 'ref' }, 'Advanced'),
+        h('a', { class: 'card', href: '#/advanced/1' },
+          h('span', { class: 'ref' }, 'Advanced 1'),
           h('h3', {}, 'Variance & lines of best fit'),
-          h('p', {}, 'Why do lines of best fit vary more when the data is spread out?'))),
+          h('p', {}, 'Why do lines of best fit vary more when the data is spread out?')),
+        h('a', { class: 'card', href: '#/advanced/2' },
+          h('span', { class: 'ref' }, 'Advanced 2'),
+          h('h3', {}, 'Measuring error'),
+          h('p', {}, 'Square the errors, add them up, and find the line with the smallest total.'))),
     );
   }
 
@@ -876,8 +880,110 @@
     };
 
     const draw = () => (s.fits.length < VTOTAL ? fitStep : results)();
-    app.replaceChildren(topicHeader(ADVANCED, 'Advanced'), host);
+    app.replaceChildren(topicHeader(ADVANCED, 'Advanced 1'), host);
     draw();
+  }
+
+  // ---------- advanced: measuring error ----------
+  // Drag a line and watch each point's error, its square, and the total
+  // update live, with a meter showing how close the line is to the best one.
+  const ERRORS = {
+    title: 'Measuring error: what makes a line the “best” fit?',
+    idea: `Each point's <b>error</b> is how far it is above or below the line (actual ${V('y')} − the line's ${V('y')}).
+      To get one number for the whole line, <b>square</b> each error and <b>add them up</b>: the <b>total squared error</b>.
+      The <b>line of best fit</b> is the line with the <b>smallest</b> total.
+      Taking the square root of the average gives the <b>RMS error</b> (root mean square), the size of a typical miss.`,
+  };
+
+  function renderErrors() {
+    const p = P.genErrorData(), n = p.xs.length;
+    const g = varPlot(460, 380);
+    const marks = G.el('g', {}, g.plot); // squares and error bars sit under the line and points
+    p.xs.forEach((x, i) => g.dot(x, p.ys[i]));
+    const mean = p.ys.reduce((t, y) => t + y, 0) / n;
+    let squares = false, record = Infinity, bestShown = false;
+
+    const cells = ['line', 'err', 'sq'].map(() => p.xs.map(() => h('td', {})));
+    const sumCell = h('td', { class: 'err-sum' });
+    const table = h('table', { class: 'data horiz err-table' }, h('tbody', {},
+      h('tr', {}, h('th', {}, h('var', {}, 'x')), p.xs.map((x) => h('td', {}, fmt(x, 1))), h('td', { class: 'err-sum' })),
+      h('tr', {}, h('th', {}, 'Actual ', h('var', {}, 'y')), p.ys.map((y) => h('td', {}, fmt(y, 1))), h('td', { class: 'err-sum' })),
+      h('tr', {}, h('th', {}, 'Line’s ', h('var', {}, 'y')), cells[0], h('td', { class: 'err-sum' })),
+      h('tr', {}, h('th', {}, 'Error'), cells[1], h('td', { class: 'err-sum' })),
+      h('tr', {}, h('th', {}, 'Error²'), cells[2], sumCell)));
+
+    const total = h('p', { class: 'err-total' });
+    const rms = h('p', { class: 'err-line' });
+    const bar = h('span', {});
+    const pct = h('span', { class: 'err-pct' });
+    const best = h('p', { class: 'err-line muted' });
+    const note = h('p', { class: 'err-line err-note' });
+
+    function update() {
+      const ls = p.xs.map((x) => at(x)), errs = p.ys.map((y, i) => y - ls[i]);
+      const sse = errs.reduce((t, e) => t + e * e, 0);
+      record = Math.min(record, sse);
+      marks.replaceChildren();
+      p.xs.forEach((x, i) => {
+        const px = g.X(x), py = g.Y(p.ys[i]), ly = g.Y(ls[i]), side = Math.abs(py - ly);
+        const cls = errs[i] >= 0 ? 'above' : 'below';
+        if (squares) {
+          const left = px + side > g.box.l + g.box.w ? px - side : px;
+          G.el('rect', { x: left, y: Math.min(py, ly), width: side, height: side, class: `g-sq ${cls}` }, marks);
+        }
+        G.el('line', { x1: px, x2: px, y1: py, y2: ly, class: `g-err ${cls}` }, marks);
+        cells[0][i].textContent = fmt(ls[i], 1);
+        cells[1][i].textContent = fmt(errs[i], 1);
+        cells[1][i].className = cls;
+        cells[2][i].textContent = fmt(errs[i] ** 2, 1);
+      });
+      sumCell.textContent = `Total ${fmt(sse, 1)}`;
+      total.textContent = fmt(sse, 1);
+      rms.innerHTML = `RMS error = √(${fmt(sse, 1)} ÷ ${n}) ≈ <b>${fmt(Math.sqrt(sse / n), 2)}</b> — a typical point is about this far from your line.`;
+      const near = Math.round(100 * p.best / sse);
+      bar.style.width = near + '%';
+      pct.textContent = `${near}% of the way to the best possible line`;
+      best.textContent = `Your lowest total so far: ${fmt(record, 1)}` + (bestShown ? ` · best possible: ${fmt(p.best, 1)}` : '');
+      note.textContent = near >= 99 ? 'You found the line of best fit — no other line has a smaller total!'
+        : near >= 90 ? 'Very close! Nudge the handles a little and watch the total.' : '';
+    }
+
+    const at = dragLine(g, VIEW, [{ x: p.xs[0], y: mean }, { x: p.xs[n - 1], y: mean }], update);
+    const segs = ['Errors', 'Squares'].map((label, k) => h('button', {
+      type: 'button', class: 'seg', 'aria-pressed': String(k === 0),
+      onclick() { squares = k === 1; segs.forEach((b, j) => b.setAttribute('aria-pressed', String(j === k))); update(); },
+    }, label));
+    const bestBtn = h('button', {
+      class: 'btn', type: 'button',
+      onclick() {
+        bestShown = true; bestBtn.disabled = true;
+        g.seg(VIEW.xMin, p.fit.b, VIEW.xMax, p.fit.b + p.fit.m * VIEW.xMax, 'g-fit');
+        update();
+      },
+    }, 'Show the best line');
+    update();
+
+    const host = h('div', { class: 'card problem' },
+      h('p', { class: 'prompt' }, h('b', {}, 'Drag the two orange handles'), ' to make the total squared error as small as you can.'),
+      h('div', { class: 'split' },
+        h('div', { class: 'graph-box' }, g.svg,
+          h('div', { class: 'legend err-legend' }, h('span', { class: 'err-above' }, 'point above the line (+)'), h('span', { class: 'err-below' }, 'point below (−)'))),
+        h('div', { class: 'err-panel' },
+          h('span', { class: 'field choice', role: 'group', 'aria-label': 'show errors or squares' }, segs),
+          h('p', { class: 'err-line muted' }, 'Total squared error'),
+          total, rms,
+          h('span', { class: 'meter err-meter', 'aria-hidden': 'true' }, bar), pct, best, note)),
+      h('div', { class: 'hscroll err-scroll' }, table),
+      h('div', { class: 'actions' }, bestBtn, h('button', { class: 'btn', type: 'button', onclick: renderErrors }, 'New data ↻')),
+      h('div', { class: 'solution' },
+        h('h4', {}, 'How the total error is calculated'),
+        h('ol', {},
+          h('li', { html: `<b>Error</b> for each point = actual ${V('y')} − line's ${V('y')}. Above the line it's positive, below it's negative.` }),
+          h('li', { html: `<b>Square</b> each error. This makes every error positive, so misses above and below can't cancel out, and it makes big misses count much more than small ones. Switch to <i>Squares</i> to see them as actual squares.` }),
+          h('li', { html: `<b>Add</b> the squares → the <b>total squared error</b>. The smaller the total, the better the line fits.` }),
+          h('li', { html: `<b>RMS error</b> = √(total ÷ number of points). Dividing by the number of points gives the average square, and the square root turns it back into ${V('y')}-units.` })),
+        h('p', {}, 'Why not just add up the errors? Positive and negative errors cancel, so a line that is badly tilted can still add up to zero!')));
+    app.replaceChildren(topicHeader(ERRORS, 'Advanced 2'), host);
   }
 
   // Built once so the strip keeps its scroll position; only the active chip changes.
@@ -885,7 +991,7 @@
   function renderNav(active) {
     if (!navBuilt) {
       const link = (href, label, key) => h('a', { href, 'data-key': key }, label);
-      nav.replaceChildren(link('#/', 'Home', 'home'), ...TOPICS.map((t) => link(`#/topic/${t.id}`, t.short, t.id)), link('#/test', 'Practice test', 'test'), link('#/advanced', 'Advanced', 'advanced'));
+      nav.replaceChildren(link('#/', 'Home', 'home'), ...TOPICS.map((t) => link(`#/topic/${t.id}`, t.short, t.id)), link('#/test', 'Practice test', 'test'), link('#/advanced/1', 'Advanced 1', 'advanced1'), link('#/advanced/2', 'Advanced 2', 'advanced2'));
     }
     let current = null;
     for (const a of nav.children) {
@@ -905,7 +1011,8 @@
     const [view, id] = location.hash.replace(/^#\/?/, '').split('/');
     if (view === 'topic' && byId[id]) { renderNav(id); renderTopic(byId[id]); }
     else if (view === 'test') { renderNav('test'); renderTest(); }
-    else if (view === 'advanced') { renderNav('advanced'); renderAdvanced(); }
+    else if (view === 'advanced' && id === '2') { renderNav('advanced2'); renderErrors(); }
+    else if (view === 'advanced') { renderNav('advanced1'); renderAdvanced(); }
     else { renderNav('home'); renderHome(); }
     window.scrollTo(0, 0);
   }

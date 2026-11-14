@@ -458,15 +458,27 @@
     return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * Math.random());
   }
 
-  function genPopulation(sd) {
-    const { n, xMax, yMax } = VARIANCE;
+  // A trend line y = y0 + m·x that stays well inside the grid and clearly
+  // rises or falls.
+  function randTrend() {
     let y0, y10;
     do { y0 = randReal(2.5, 9.5); y10 = randReal(2.5, 9.5); } while (Math.abs(y10 - y0) < 3);
-    const m = (y10 - y0) / xMax;
+    return { y0, m: (y10 - y0) / VARIANCE.xMax };
+  }
+
+  // y = trend(x) + noise, redrawing the noise until the point is on the grid.
+  function noisyY(t, x, sd) {
+    let y;
+    do y = t.y0 + t.m * x + sd * randNormal(); while (y <= 0.2 || y >= VARIANCE.yMax - 0.2);
+    return round(y);
+  }
+
+  function genPopulation(sd) {
+    const t = randTrend();
     const pts = [];
-    while (pts.length < n) {
-      const x = randReal(0.3, xMax - 0.3), y = y0 + m * x + sd * randNormal();
-      if (y > 0.2 && y < yMax - 0.2) pts.push([round(x), round(y)]);
+    for (let i = 0; i < VARIANCE.n; i++) {
+      const x = round(randReal(0.3, VARIANCE.xMax - 0.3));
+      pts.push([x, noisyY(t, x, sd)]);
     }
     return { sd, pts, fit: leastSquares(pts.map((p) => p[0]), pts.map((p) => p[1])) };
   }
@@ -489,10 +501,29 @@
     return { m, b };
   }
 
+  // ---------- Advanced: measuring error ----------
+  // Sum of squared vertical errors from the points to y = mx + b.
+  function sumSquares(xs, ys, m, b) {
+    return xs.reduce((s, x, i) => s + (ys[i] - (m * x + b)) ** 2, 0);
+  }
+
+  // About 10 points, one per unit of x with a little jitter, scattered
+  // around a trend. The least-squares line is the smallest error possible.
+  function genErrorData() {
+    const t = randTrend();
+    const xs = [], ys = [];
+    for (let x = 0.5; x < VARIANCE.xMax; x += 1) {
+      const xi = round(x + randReal(-0.3, 0.3), 1);
+      xs.push(xi); ys.push(round(noisyY(t, xi, 1.3), 1));
+    }
+    const fit = leastSquares(xs, ys);
+    return { xs, ys, fit, best: sumSquares(xs, ys, fit.m, fit.b) };
+  }
+
   const api = {
     randInt, pick, shuffle, round, fmt, money, parseNum, close, niceStep, leastSquares, slopeAt, expr, V, frac,
     genEquations, genGraphs, genDifferences, genVarRoles, genRate, genFit, genFee, genTrend, genCompare,
-    VARIANCE, genVarianceDists, sampleIdx, genFlip, flipPt, unflipLine,
+    VARIANCE, genVarianceDists, sampleIdx, genFlip, flipPt, unflipLine, sumSquares, genErrorData,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Problems = api;

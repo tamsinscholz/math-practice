@@ -144,3 +144,17 @@ test('variance: a line fitted on flipped axes maps back onto the original points
     assert.ok(Math.abs(line.m * ox + line.b - oy) < 1e-9, `${flip} at ${x}`);
   }
 }));
+
+test('error data: points on the grid, and no nearby line beats least squares', () => times(() => {
+  const p = P.genErrorData();
+  assert.equal(p.xs.length, 10);
+  p.xs.forEach((x, i) => assert.ok(x > 0 && x < P.VARIANCE.xMax && p.ys[i] > 0 && p.ys[i] < P.VARIANCE.yMax));
+  assert.ok(Math.abs(p.best - P.sumSquares(p.xs, p.ys, p.fit.m, p.fit.b)) < 1e-9);
+  for (const [dm, db] of [[0.05, 0], [-0.05, 0], [0, 0.2], [0, -0.2], [0.03, -0.15]]) {
+    assert.ok(P.sumSquares(p.xs, p.ys, p.fit.m + dm, p.fit.b + db) > p.best);
+  }
+}));
+
+test('sumSquares adds up squared vertical errors', () => {
+  assert.equal(P.sumSquares([0, 1, 2], [1, 3, 2], 1, 0), 1 + 4 + 0);
+});
